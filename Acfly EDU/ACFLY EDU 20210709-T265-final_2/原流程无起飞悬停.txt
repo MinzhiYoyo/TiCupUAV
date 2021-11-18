@@ -1,0 +1,87 @@
+Mode_Inf->last_button_value = rc->data[5];
+		//等待按钮按下开始判断
+		while(!(get_is_inFlight() == false && fabsf( rc->data[5] - Mode_Inf->last_button_value ) > 15));
+		switch( HM_Mode )
+		{
+			case KEEP:
+				//保持原位悬停
+				Position_Control_set_XYLock();
+				Position_Control_set_ZLock();
+				Attitude_Control_set_YawLock();
+				break;
+			
+			case TAKE_OFF:
+				//CON1为起飞高度，其余两个弃用
+				if(Mode_Inf->auto_step1 == 0)
+				{
+					Position_Control_Takeoff_HeightRelative(CON1);
+					++Mode_Inf->auto_step1;
+					Mode_Inf->auto_counter = 0;
+				}
+				else //等待起飞完成
+				{
+					if( get_Altitude_ControlMode() == Position_ControlMode_Position )
+					{
+						Mode_Inf->last_button_value = rc->data[5];
+						Mode_Inf->auto_step1 = 0;
+						Mode_Inf->auto_counter = 0;
+						HM_Mode = KEEP;
+					}
+				}
+				break;
+			
+			case GROUND:
+				//CON1为降落速度，其余两个弃用
+				if(Mode_Inf->auto_step1 == 0)
+				{
+					Position_Control_set_TargetVelocityZ(-50);
+					++Mode_Inf->auto_step1;
+					Mode_Inf->auto_counter = 0;
+				}
+				else  //等待降落完成
+				{
+					if( get_is_inFlight() == false )
+					{
+						Mode_Inf->auto_step1 = 0;
+						Mode_Inf->auto_counter = 0;
+						HM_Mode = KEEP;
+					}
+				}
+				break;
+				
+			case VELOCITY_CONTROL:
+				//CON1=Vx,CON2=Vy,CON3=Vz
+				Position_Control_set_TargetVelocityBodyHeadingXY(CON1,CON2);
+				Position_Control_set_TargetVelocityZ(CON3);
+				HM_Mode = KEEP;
+				break;
+				
+			case POSITION_CONTROL:
+				//CON1=Sx,CON2=Sy,CON3=Sz
+				Position_Control_set_TargetPositionXYRelativeBodyHeading(CON1,CON2);
+				Position_Control_set_TargetVelocityZ(CON3);
+				HM_Mode = KEEP;
+			  break;
+						
+			case POSTURE_CONTROL:
+				//CON1=row,CON2=pitch,CON3=yaw（三角的角度）
+				Attitude_Control_set_Target_RollPitch(CON1,CON2);
+				Attitude_Control_set_Target_YawRelative(CON3);
+				HM_Mode = KEEP;
+			  break;
+				
+			case CIRCLE:
+				//CON1=Vx,CON2=Vy,CON3=yaw（偏航角旋转速度）
+				Position_Control_set_TargetVelocityBodyHeadingXY(CON1,CON2);
+				Attitude_Control_set_Target_YawRate(CON3);
+				HM_Mode = KEEP;
+				break;
+			
+			default:
+				//收到控制消息但是无对应模式，判断为强制悬停
+				Attitude_Control_set_Target_YawRate(0);
+				Position_Control_set_TargetVelocityZ(0);
+				Position_Control_set_TargetVelocityBodyHeadingXY(0,0);
+				HM_Mode = KEEP;
+				break;
+		}
